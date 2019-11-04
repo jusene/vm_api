@@ -1,18 +1,17 @@
 import os
-from rest_framework import status
-from api.serializers import VMListSerializer, VMDetailSerializer
 from django.http import Http404
 from django.conf import settings
 from django.template import Context, Template, TemplateDoesNotExist
-from utils.AnsibleUtil import ansiblerun
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import BasePermission
 from utils.ListVM import domlist, domdetail
 from utils.ShutDownVM import destoryvm, shutdownvm
 from utils.CreateVM import startvm, restartvm, createvm
 from utils.DeleteVM import deletevm, delete_no_destroyvm
-from rest_framework.permissions import BasePermission
-from utils.AnsibleUtil import message
+from utils.AnsibleUtil import AnsibleRun
+from api.serializers import VMListSerializer, VMDetailSerializer
 
 
 class AuthPermission(BasePermission):
@@ -22,7 +21,14 @@ class AuthPermission(BasePermission):
 
 # Create your views here.
 class Root(APIView):
+    permission_classes = [AuthPermission, ]
+
     def get(self, request, format=None):
+        '''
+        :param request:
+        :param format:
+        :return:
+        '''
         host = request.headers.get('Host')
         err, vm_list = domlist()
         if err:
@@ -31,18 +37,25 @@ class Root(APIView):
         if serializer.is_valid():
             vm_detail_list = {}
             for v in serializer.validated_data:
-                vm_detail_list[v.get('name')+'虚拟机详情'] = 'http://{host}/api/v1/vms/{vm_name}/'.format(host=host,
+                vm_detail_list[v.get('name')] = 'http://{host}/api/v1/vms/{vm_name}/'.format(host=host,
                                                                                              vm_name=v.get('name'))
         route = {
-            "虚拟机列表": "http://{host}/api/v1/vms/".format(host=host),
-            "宿主机详情": "http://{host}/api/v1/hosts/".format(host=host)
+            "vms": "http://{host}/api/v1/vms/".format(host=host),
+            "hosts": "http://{host}/api/v1/hosts/".format(host=host)
         }
         route.update(vm_detail_list)
         return Response(route, status=status.HTTP_200_OK)
 
 
 class VMList(APIView):
+    permission_classes = [AuthPermission, ]
+
     def get(self, request, format=None):
+        '''
+        :param request:
+        :param format:
+        :return:
+        '''
         err, vm_list = domlist()
         if err:
             return Response(vm_list, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -86,15 +99,16 @@ class VMList(APIView):
                              args="/usr/bin/qemu-img create -f qcow2 -b {image_path}/model.qcow2 "
                                   "{image_path}/{name}.qcow2".format(image_path=settings.IMG_PATH, name=vm_name))),
         ]
-        ansiblerun(host_list, task_list)
-        msg = message.get()
-        if msg['runner'] == "failed":
-            return Response({"error": 1, "message": msg.get(settings.VM_HOST)},
+        result = AnsibleRun(host_list, task_list)
+        result.task_run()
+        msg = result.get_result()
+        if msg['failed']:
+            return Response({"error": 1, "message": msg.get('failed')},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        elif msg['runner'] == 'unreachable':
-            return Response({"error": 1, "message": msg.get(settings.VM_HOST)},
+        elif msg['unreachable']:
+            return Response({"error": 1, "message": msg.get('unreachable')},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        elif msg['runner'] == 'ok':
+        elif msg['ok']:
             temp = Template(vmdesc)
             temp_context = Context({"NAME": vm_name, "CPU": vm_cpu, "MEMORY": vm_mem,
                             "IMAGE": os.path.join(settings.IMG_PATH, '{}.qcow2'.format(vm_name))})
@@ -208,6 +222,8 @@ class VMDetail(APIView):
 
 
 class HostList(APIView):
+    permission_classes = [AuthPermission, ]
+
     def get(self, request, format=None):
         '''
         : ansible facts
@@ -219,5 +235,6 @@ class HostList(APIView):
         task_list = [
             dict(action=dict(module='setup')),
         ]
-        ansiblerun(host_list, task_list)
-        return Response(message.get(), status=status.HTTP_200_OK)
+        ans = AnsibleRun(host_list, task_list)
+        ans.task_run()
+        return Response(ans.get_result(), status=status.HTTP_200_OK)

@@ -2,8 +2,8 @@ import os
 from utils.QemuCon import qemu_isalive
 from utils.ShutDownVM import destoryvm
 from django.conf import settings
-from utils.AnsibleUtil import ansiblerun
-from utils.AnsibleUtil import message as msg
+from utils.AnsibleUtil import AnsibleRun
+
 
 @qemu_isalive
 def deletevm(conn, name):
@@ -34,14 +34,15 @@ def deletevm(conn, name):
             dict(action=dict(module='file', args="name={} state=absent".format(img_path))),
             dict(action=dict(module='file', args="path=/ddhome/kvm/config/{} state=absent".format(name)))
         ]
-        ansiblerun(host_list, task_list)
-        news = msg.get()
-        if news['runner'] == "failed":
-            raise OSError({"error": 1, "message": news.get(settings.VM_HOST)})
-        elif news['runner'] == 'unreachable':
-            raise OSError({"error": 1, "message": news.get(settings.VM_HOST)})
-        elif news['runner'] == 'ok':
-            ret_message.append({"error": 0, "message": news.get(settings.VM_HOST)})
+        ans = AnsibleRun(host_list, task_list)
+        ans.task_run()
+        msg = ans.get_result()
+        if msg["failed"]:
+            raise OSError({"error": 1, "message": msg.get('failed')})
+        elif msg['unreachable']:
+            raise OSError({"error": 1, "message": msg.get('unreachable')})
+        elif msg['ok']:
+            ret_message.append({"error": 0, "message": msg.get('ok')})
             return None, ret_message
     except Exception as e:
         print(e)
@@ -70,14 +71,15 @@ def delete_no_destroyvm(conn, name):
         task_list = [
             dict(action=dict(module='file', args="name={} state=absent".format(img_path))),
         ]
-        ansiblerun(host_list, task_list)
-        news = msg.get()
-        if news['runner'] == "failed":
-            raise OSError({"error": 1, "message": news.get(settings.VM_HOST)})
-        elif news['runner'] == 'unreachable':
-            raise OSError({"error": 1, "message": news.get(settings.VM_HOST)})
-        elif news['runner'] == 'ok':
-            ret_message.append({"error": 0, "message": news.get(settings.VM_HOST)})
+        ans = AnsibleRun(host_list, task_list)
+        ans.task_run()
+        msg = ans.get_result()
+        if msg["failed"]:
+            raise OSError({"error": 1, "message": msg.get('failed')})
+        elif msg['unreachable']:
+            raise OSError({"error": 1, "message": msg.get('unreachable')})
+        elif msg['ok']:
+            ret_message.append({"error": 0, "message": msg.get('ok')})
             return None, ret_message
     except Exception as e:
         print(e)

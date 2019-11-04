@@ -1,4 +1,3 @@
-import json
 import shutil
 from collections import namedtuple
 from ansible.parsing.dataloader import DataLoader
@@ -8,9 +7,6 @@ from ansible.playbook.play import Play
 from ansible.executor.task_queue_manager import TaskQueueManager
 from ansible.plugins.callback import CallbackBase
 import ansible.constants as C
-import queue
-
-message = queue.Queue()
 
 
 class ResultCallback(CallbackBase):
@@ -24,57 +20,64 @@ class ResultCallback(CallbackBase):
         host = result._host
         self.host_ok[host.name] = result._result
         self.host_ok['runner'] = 'ok'
-        message.put(self.host_ok)
 
     def v2_runner_item_on_failed(self, result):
         host = result._host
         self.host_failed[host.name] = result._result
         self.host_failed['runner'] = 'failed'
-        message.put(self.host_failed)
 
     def v2_runner_on_unreachable(self, result):
         host = result._host
         self.host_unreachable[host.name] = result._result
         self.host_unreachable['runner'] = 'unreachable'
-        message.put(self.host_unreachable)
 
 
-def ansiblerun(host_list, task_list):
-    Options = namedtuple('Options',
+class AnsibleRun:
+    def __init__(self, host_list, task_list):
+        Options = namedtuple('Options',
                          ['connection', 'module_path', 'forks', 'become', 'become_method', 'become_user', 'check',
                           'diff', 'remote_user'])
-    options = Options(connection='smart', module_path=None, forks=10, become=None, become_method=None, become_user=None,
-                      check=False, diff=False, remote_user='root')
+        self.options = Options(connection='smart', module_path=None, forks=10, become=None, become_method=None, become_user=None,
+                            check=False, diff=False, remote_user='root')
 
-    loader = DataLoader()
-    passwords = dict()
+        self.loader = DataLoader()
+        self.passwords = dict()
 
-    results_callback = ResultCallback()
+        self.results_callback = ResultCallback()
+        self.host_list = host_list
+        self.task_list = task_list
+        self.inventory = InventoryManager(loader=self.loader, sources=self.host_list)
+        self.variable_manager = VariableManager(loader=self.loader, inventory=self.inventory)
 
-    inventory = InventoryManager(loader=loader, sources=host_list)
-    variable_manager = VariableManager(loader=loader, inventory=inventory)
-
-    play_source = dict(
-        name="Ansible Play",
-        hosts=host_list,
-        gather_facts='no',
-        tasks=task_list
-    )
-
-    play = Play().load(play_source, variable_manager=variable_manager, loader=loader)
-
-    tqm = None
-    try:
-        tqm = TaskQueueManager(
-            inventory=inventory,
-            variable_manager=variable_manager,
-            loader=loader,
-            options=options,
-            passwords=passwords,
-            stdout_callback=results_callback,
+    def task_run(self):
+        play_source = dict(
+            name="Ansible Play",
+            hosts=self.host_list,
+            gather_facts='no',
+            tasks=self.task_list
         )
-        tqm.run(play)
-    finally:
-        if tqm is not None:
-            tqm.cleanup()
-        shutil.rmtree(C.DEFAULT_LOCAL_TMP, True)
+
+        play = Play().load(play_source, variable_manager=self.variable_manager, loader=self.loader)
+
+        tqm = None
+        try:
+            tqm = TaskQueueManager(
+                inventory=self.inventory,
+                variable_manager=self.variable_manager,
+                loader=self.loader,
+                options=self.options,
+                passwords=self.passwords,
+                stdout_callback=self.results_callback,
+            )
+            tqm.run(play)
+        finally:
+            if tqm is not None:
+                tqm.cleanup()
+            shutil.rmtree(C.DEFAULT_LOCAL_TMP, True)
+
+    def get_result(self):
+        result = {}
+        result['ok'] = self.results_callback.host_ok
+        result['failed'] = self.results_callback.host_failed
+        result['unreachable'] = self.results_callback.host_unreachable
+        return result

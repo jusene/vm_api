@@ -1,6 +1,6 @@
 from utils.QemuCon import qemu_isalive
 from django.conf import settings
-from utils.AnsibleUtil import message, ansiblerun
+from utils.AnsibleUtil import AnsibleRun
 
 
 @qemu_isalive
@@ -34,14 +34,15 @@ def createvm(conn, xmldesc, ifdesc, name):
             dict(action=dict(module='shell', args='/usr/bin/virt-copy-in -d {name} /ddhome/kvm/config/{name}/ifcfg-eth0 '
                                                   '/etc/sysconfig/network-scripts/'.format(name=name)))
         ]
-        ansiblerun(host_list, task_list)
-        news = message.get()
-        if news['runner'] == "failed":
-            raise OSError({"error": 1, "message": news.get(settings.VM_HOST)})
-        elif news['runner'] == 'unreachable':
-            raise OSError({"error": 1, "message": news.get(settings.VM_HOST)})
-        elif news['runner'] == 'ok':
-            ret_message.append({"error": 0, "message": news.get(settings.VM_HOST)})
+        ans = AnsibleRun(host_list, task_list)
+        ans.task_run()
+        msg = ans.get_result()
+        if msg["failed"]:
+            raise OSError({"error": 1, "message": msg.get('failed')})
+        elif msg['unreachable']:
+            raise OSError({"error": 1, "message": msg.get('unreachable')})
+        elif msg['ok']:
+            ret_message.append({"error": 0, "message": msg.get('ok')})
             return None, ret_message
     except Exception as e:
         return True, {"error": 1, "message": "{}".format(e)}
