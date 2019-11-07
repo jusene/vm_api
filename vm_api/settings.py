@@ -23,7 +23,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SECRET_KEY = '!5%t6k1a%cw%(wk^huh!@^!7dat%xu**q-rj(duhrd$ulrnvwu'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
@@ -126,3 +126,9 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 QEMU_URL = 'qemu+tcp://192.168.55.58:16509/system'
 IMG_PATH = '/ddhome/kvm/images'
 VM_HOST = '192.168.55.58'
+REDIS = {
+    "HOST": "192.168.66.100",
+    "PORT": 6379,
+    "DB": 0,
+    "PASSWORD": ""
+}

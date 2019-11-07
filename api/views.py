@@ -1,4 +1,6 @@
 import os
+import json
+import IPy
 from django.http import Http404
 from django.conf import settings
 from django.template import Context, Template, TemplateDoesNotExist
@@ -11,6 +13,8 @@ from utils.ShutDownVM import destoryvm, shutdownvm
 from utils.CreateVM import startvm, restartvm, createvm
 from utils.DeleteVM import deletevm, delete_no_destroyvm
 from utils.AnsibleUtil import AnsibleRun
+from utils.IPool import ip_pool
+from utils.RedisCon import rdscon
 from api.serializers import VMListSerializer, VMDetailSerializer
 
 
@@ -41,7 +45,8 @@ class Root(APIView):
                                                                                              vm_name=v.get('name'))
         route = {
             "vms": "http://{host}/api/v1/vms/".format(host=host),
-            "hosts": "http://{host}/api/v1/hosts/".format(host=host)
+            "hosts": "http://{host}/api/v1/hosts/".format(host=host),
+            'ips': "http://{host}/api/v1/ips".format(host=host)
         }
         route.update(vm_detail_list)
         return Response(route, status=status.HTTP_200_OK)
@@ -219,6 +224,73 @@ class VMDetail(APIView):
 
             return Response(message, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class IPList(APIView):
+    permission_classes = [AuthPermission, ]
+
+    def get(self, request, format=None):
+        '''
+        :param request:
+        :param pk:
+        :param format:
+        :return:
+        '''
+        err, rds = rdscon()
+        if err:
+            return Response({"error": 1, "message": rds}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        try:
+            pool = rds.get("ip::pool")
+        except Exception as e:
+            pool = []
+        return Response(json.loads(pool), status=status.HTTP_200_OK)
+
+    def post(self, request, format=None):
+        netdata = request.data.get("network")
+        err, message = ip_pool(netdata)
+        if err:
+            return Response({"error": 1, "message": message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(message, status=status.HTTP_201_CREATED)
+
+
+class IPDetail(APIView):
+    permission_classes = [AuthPermission, ]
+
+    def delete(self, request, pk, format=None):
+        try:
+            IPy.IP(pk)
+
+            err, rds = rdscon()
+            if err:
+                return Response({"error": 1, "message": rds}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            pool = rds.get("ip::pool")
+            p = json.loads(pool)
+            try:
+                p.remove(pk)
+            except Exception as e:
+                return Response({"error": 1, "message": "{} does not exists on pool!"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            rds.set("ip::pool", json.dumps(p))
+            return Response({"error": 0, "message": "{} remove pool".format(pk)}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": 1, "message": "{} is not a ip address".format(pk)})
+
+    def put(self, request, pk, format=None):
+        try:
+            IPy.IP(pk)
+
+            err, rds = rdscon()
+            if err:
+                return Response({"error": 1, "message": rds}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            pool = rds.get("ip::pool")
+            p = json.loads(pool)
+            p.append(pk)
+            s = set(p)
+            p = list(s)
+            rds.set("ip::pool", json.dumps(p))
+            return Response({"error": 0, "message": "{} append pool".format(pk)}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": 1, "message": "{} is not a ip address".format(pk)})
 
 
 class HostList(APIView):

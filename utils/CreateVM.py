@@ -19,10 +19,8 @@ def createvm(conn, xmldesc, ifdesc, name):
         ret_message = []
         # define
         dom = conn.defineXML(xmldesc)
-        if dom.name() != name:
-            raise OSError('{} define error'.format(name))
-        else:
-            ret_message.append({"error": 0, "message": "{} define!".format(name)})
+        assert dom.name() == name, '{} define error'.format(name)
+        ret_message.append({"error": 0, "message": "{} define!".format(name)})
         # copy ifcfg-eth0 and virt-copy-in
         with open('templates/{}_ifcfg-eth0'.format(name), 'w') as fp:
             fp.write(ifdesc)
@@ -58,10 +56,8 @@ def startvm(conn, name):
     try:
         dom = conn.lookupByName(name)
         ret = dom.create()
-        if ret != 0:
-            raise OSError('{} start error!'.format((name)))
-        else:
-            return None, {"error": 0, "message": "{} start!".format(name)}
+        assert ret == 0, "{} start error!".format(name)
+        return None, {"error": 0, "message": "{} start!".format(name)}
     except Exception as e:
         return True, {"error": 1, "message": "{}".format(e)}
 
@@ -76,9 +72,7 @@ def restartvm(conn, name):
     try:
         dom = conn.lookupByName(name)
         ret = dom.reboot()
-        if ret != 0:
-            raise OSError('{} restart error!'.format((name)))
-        else:
-            return None, {"error": 0, "message": "{} restart!".format(name)}
+        assert ret == 0, '{} restart error!'.format(name)
+        return None, {"error": 0, "message": "{} restart!".format(name)}
     except Exception as e:
         return True, {"error": 1, "message": "{}".format(e)}

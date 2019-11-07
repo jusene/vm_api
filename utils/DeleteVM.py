@@ -18,14 +18,13 @@ def deletevm(conn, name):
         ret_message = []
         # destory
         err, message = destoryvm(name)
-        if err:
-            raise OSError('{} shutdown force error!'.format(name))
+        print(err)
+        assert err is None, '{} shutdown force error!'.format(name)
         ret_message.append(message)
         # undefine
         dom = conn.lookupByName(name)
         ret = dom.undefine()
-        if ret != 0:
-            raise OSError('{} undefine error!'.format(name))
+        assert ret == 0, '{} undefine error!'.format(name)
         ret_message.append({"error": 0, "message": "{} undefine!".format(name)})
         # delete
         img_path = os.path.join(settings.IMG_PATH, name+'.qcow2')
@@ -62,8 +61,7 @@ def delete_no_destroyvm(conn, name):
         # undefine
         dom = conn.lookupByName(name)
         ret = dom.undefine()
-        if ret != 0:
-            raise OSError('{} undefine error!'.format(name))
+        assert ret == 0, '{} undefine error!'.format(name)
         ret_message.append({"error": 0, "message": "{} undefine!".format(name)})
         # delete
         img_path = os.path.join(settings.IMG_PATH, name + '.qcow2')
