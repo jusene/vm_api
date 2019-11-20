@@ -14,7 +14,8 @@ from utils.CreateVM import startvm, restartvm, createvm
 from utils.DeleteVM import deletevm, delete_no_destroyvm
 from utils.AnsibleUtil import AnsibleRun
 from utils.IPool import ip_pool
-from utils.RedisCon import rdscon
+from utils.RedisCon import rdscon, get_host
+from utils.QemuCon import qemu_connect
 from api.serializers import VMListSerializer, VMDetailSerializer
 
 
@@ -98,7 +99,9 @@ class VMList(APIView):
                 ifdesc = fp.read()
         except Exception as e:
             raise TemplateDoesNotExist('ifcfg-eth0')
-        host_list = '{},'.format(settings.VM_HOST)
+        err, host = get_host()
+        assert err is None, "GET HOST ERROR"
+        host_list = '{},'.format(host)
         task_list = [
             dict(action=dict(module='shell',
                              args="/usr/bin/qemu-img create -f qcow2 -b {image_path}/model.qcow2 "
@@ -238,7 +241,8 @@ class IPList(APIView):
         '''
         err, rds = rdscon()
         if err:
-            return Response({"error": 1, "message": rds}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": 1, "message": rds},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         try:
             pool = rds.get("ip::pool")
         except Exception as e:
@@ -249,7 +253,8 @@ class IPList(APIView):
         netdata = request.data.get("network")
         err, message = ip_pool(netdata)
         if err:
-            return Response({"error": 1, "message": message}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": 1, "message": message},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(message, status=status.HTTP_201_CREATED)
 
 
@@ -262,18 +267,20 @@ class IPDetail(APIView):
 
             err, rds = rdscon()
             if err:
-                return Response({"error": 1, "message": rds}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"error": 1, "message": '{}'.format(rds)},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             pool = rds.get("ip::pool")
             p = json.loads(pool)
             try:
                 p.remove(pk)
             except Exception as e:
-                return Response({"error": 1, "message": "{} does not exists on pool!"},
+                return Response({"error": 1, "message": "{} does not exists on pool!".format(pk)},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             rds.set("ip::pool", json.dumps(p))
             return Response({"error": 0, "message": "{} remove pool".format(pk)}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": 1, "message": "{} is not a ip address".format(pk)})
+            return Response({"error": 1, "message": "{} is not a ip address".format(pk)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def put(self, request, pk, format=None):
         try:
@@ -281,7 +288,7 @@ class IPDetail(APIView):
 
             err, rds = rdscon()
             if err:
-                return Response({"error": 1, "message": rds}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                return Response({"error": 1, "message": '{}'.format(rds)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             pool = rds.get("ip::pool")
             p = json.loads(pool)
             p.append(pk)
@@ -290,7 +297,8 @@ class IPDetail(APIView):
             rds.set("ip::pool", json.dumps(p))
             return Response({"error": 0, "message": "{} append pool".format(pk)}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": 1, "message": "{} is not a ip address".format(pk)})
+            return Response({"error": 1, "message": "{} is not a ip address".format(pk)},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class HostList(APIView):
@@ -303,10 +311,57 @@ class HostList(APIView):
         :param format:
         :return:
         '''
-        host_list = '{},'.format(settings.VM_HOST)
+        err, host = get_host()
+        assert err is None, 'GET HOST ERROR'
+        host_list = '{},'.format(host)
         task_list = [
-            dict(action=dict(module='setup')),
+            dict(action=dict(module='script',
+                             args='templates/sys_info.py')),
         ]
         ans = AnsibleRun(host_list, task_list)
         ans.task_run()
         return Response(ans.get_result(), status=status.HTTP_200_OK)
+
+    def post(self, request, format=None):
+        '''
+        : change  host
+        :param request:
+        :param format:
+        :return:
+        '''
+        data = request.data
+        vm_host = data.get('host')
+        err, rds = rdscon()
+        try:
+            assert err is None, 'REDIS CONNECT ERROR'
+            rds.set("host::ip", vm_host)
+            return Response({"error": 0, "message": "host change ok"}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": 1, "message": "{}".format(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class HostDetail(APIView):
+    permission_classes = [AuthPermission, ]
+
+    def get(self, request, pk, format=None):
+        '''
+        :param request:
+        :param pk:
+        :param format:
+        :return:
+        '''
+        try:
+            err, conn = qemu_connect(pk)
+            assert err is None, 'QEMU CONN ERROR'
+            doms = list(map(lambda x: x.name(), conn.listAllDomains()))
+            ips = []
+            for d in doms:
+                with open('templates/{}_ifcfg-eth0'.format(d)) as fp:
+                    data = fp.readlines()
+                    ipaddr = [line.split('=')[1].strip() for line in data if 'IPADDR' in line]
+                    ips.append(ipaddr[0])
+            doms_list = list(map(lambda x, y: {'name': x, 'ip': y}, doms, ips))
+            return Response(doms_list, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": 1, "message": "{}".format(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

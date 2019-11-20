@@ -1,6 +1,6 @@
 from utils.QemuCon import qemu_isalive
-from django.conf import settings
 from utils.AnsibleUtil import AnsibleRun
+from utils.RedisCon import get_host
 
 
 @qemu_isalive
@@ -24,7 +24,9 @@ def createvm(conn, xmldesc, ifdesc, name):
         # copy ifcfg-eth0 and virt-copy-in
         with open('templates/{}_ifcfg-eth0'.format(name), 'w') as fp:
             fp.write(ifdesc)
-        host_list = '{},'.format(settings.VM_HOST)
+        err, host = get_host()
+        assert err is None, "GET HOST ERROR"
+        host_list = '{},'.format(host)
         task_list = [
             dict(action=dict(module="file", args="path=/ddhome/kvm/config/{} state=directory".format(name))),
             dict(action=dict(module='copy', args='src=templates/{name}_ifcfg-eth0 '

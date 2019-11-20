@@ -11,3 +11,16 @@ def rdscon():
         return None, rds
     except Exception as e:
         return True, e
+
+
+def get_host(host=None):
+    if host is None:
+        err, rds = rdscon()
+        try:
+            assert err is None, 'REDIS CONNECT ERROR'
+            host = rds.get("host::ip").decode()
+            return None, host
+        except Exception as e:
+            return True, e
+    else:
+        return None, host

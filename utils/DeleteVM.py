@@ -1,8 +1,9 @@
 import os
 from utils.QemuCon import qemu_isalive
-from utils.ShutDownVM import destoryvm
 from django.conf import settings
+from utils.ShutDownVM import destoryvm
 from utils.AnsibleUtil import AnsibleRun
+from utils.RedisCon import get_host
 
 
 @qemu_isalive
@@ -28,7 +29,9 @@ def deletevm(conn, name):
         ret_message.append({"error": 0, "message": "{} undefine!".format(name)})
         # delete
         img_path = os.path.join(settings.IMG_PATH, name+'.qcow2')
-        host_list = '{},'.format(settings.VM_HOST)
+        err, host = get_host()
+        assert err is None, "GET HOST ERROR"
+        host_list = '{},'.format(host)
         task_list = [
             dict(action=dict(module='file', args="name={} state=absent".format(img_path))),
             dict(action=dict(module='file', args="path=/ddhome/kvm/config/{} state=absent".format(name)))
@@ -65,7 +68,9 @@ def delete_no_destroyvm(conn, name):
         ret_message.append({"error": 0, "message": "{} undefine!".format(name)})
         # delete
         img_path = os.path.join(settings.IMG_PATH, name + '.qcow2')
-        host_list = '{},'.format(settings.VM_HOST)
+        err, host = get_host()
+        assert err is None, "GET HOST ERROR"
+        host_list = '{},'.format(host)
         task_list = [
             dict(action=dict(module='file', args="name={} state=absent".format(img_path))),
         ]
