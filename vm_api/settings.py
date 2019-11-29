@@ -133,3 +133,4 @@ REDIS = {
 }
 
 IMG_PATH = '/ddhome/kvm/images'
+
