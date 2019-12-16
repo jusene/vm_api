@@ -2,7 +2,6 @@ from utils.QemuCon import qemu_isalive
 import libvirt
 
 
-@qemu_isalive
 def domlist(conn):
     try:
         doms = map(lambda x: x.name(), conn.listAllDomains())
@@ -12,8 +11,6 @@ def domlist(conn):
         return True, {'error': 1, 'message': "{}".format(e)}
 
 
-
-@qemu_isalive
 def domdetail(conn, name):
     try:
         dom = conn.lookupByName(name)

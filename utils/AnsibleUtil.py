@@ -21,7 +21,7 @@ class ResultCallback(CallbackBase):
         self.host_ok[host.name] = result._result
         self.host_ok['runner'] = 'ok'
 
-    def v2_runner_item_on_failed(self, result):
+    def v2_runner_on_failed(self, result):
         host = result._host
         self.host_failed[host.name] = result._result
         self.host_failed['runner'] = 'failed'

@@ -11,10 +11,17 @@
     <acpi/>
     <apic/>
   </features>
+  <!--
   <cpu mode='custom' match='exact' check='partial'>
     <model fallback='allow'>Skylake-Client-IBRS</model>
     <feature policy='require' name='spec-ctrl'/>
     <feature policy='require' name='ssbd'/>
+  </cpu>
+  -->
+  <cpu mode='custom' match='exact' check='full'>
+    <model fallback='forbid'>Broadwell</model>
+    <feature policy='require' name='hypervisor'/>
+    <feature policy='require' name='xsaveopt'/>
   </cpu>
   <clock offset='utc'>
     <timer name='rtc' tickpolicy='catchup'/>

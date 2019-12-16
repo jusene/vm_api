@@ -1,9 +1,8 @@
 from utils.QemuCon import qemu_isalive
-from django.conf import settings
 from utils.AnsibleUtil import AnsibleRun
+from utils.RedisCon import get_host
 
 
-@qemu_isalive
 def createvm(conn, xmldesc, ifdesc, name):
     '''
     : 1. define
@@ -19,14 +18,14 @@ def createvm(conn, xmldesc, ifdesc, name):
         ret_message = []
         # define
         dom = conn.defineXML(xmldesc)
-        if dom.name() != name:
-            raise OSError('{} define error'.format(name))
-        else:
-            ret_message.append({"error": 0, "message": "{} define!".format(name)})
+        assert dom.name() == name, '{} define error'.format(name)
+        ret_message.append({"error": 0, "message": "{} define!".format(name)})
         # copy ifcfg-eth0 and virt-copy-in
         with open('templates/{}_ifcfg-eth0'.format(name), 'w') as fp:
             fp.write(ifdesc)
-        host_list = '{},'.format(settings.VM_HOST)
+        err, host = get_host()
+        assert err is None, "GET HOST ERROR"
+        host_list = '{},'.format(host)
         task_list = [
             dict(action=dict(module="file", args="path=/ddhome/kvm/config/{} state=directory".format(name))),
             dict(action=dict(module='copy', args='src=templates/{name}_ifcfg-eth0 '
@@ -48,7 +47,7 @@ def createvm(conn, xmldesc, ifdesc, name):
         return True, {"error": 1, "message": "{}".format(e)}
 
 
-@qemu_isalive
+
 def startvm(conn, name):
     '''
     : start
@@ -58,15 +57,13 @@ def startvm(conn, name):
     try:
         dom = conn.lookupByName(name)
         ret = dom.create()
-        if ret != 0:
-            raise OSError('{} start error!'.format((name)))
-        else:
-            return None, {"error": 0, "message": "{} start!".format(name)}
+        assert ret == 0, "{} start error!".format(name)
+        return None, {"error": 0, "message": "{} start!".format(name)}
     except Exception as e:
         return True, {"error": 1, "message": "{}".format(e)}
 
 
-@qemu_isalive
+
 def restartvm(conn, name):
     '''
     : restart
@@ -76,9 +73,7 @@ def restartvm(conn, name):
     try:
         dom = conn.lookupByName(name)
         ret = dom.reboot()
-        if ret != 0:
-            raise OSError('{} restart error!'.format((name)))
-        else:
-            return None, {"error": 0, "message": "{} restart!".format(name)}
+        assert ret == 0, '{} restart error!'.format(name)
+        return None, {"error": 0, "message": "{} restart!".format(name)}
     except Exception as e:
         return True, {"error": 1, "message": "{}".format(e)}
